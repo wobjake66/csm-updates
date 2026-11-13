@@ -323,7 +323,7 @@
   /* ---------- Normalizing sheet values into the mockup's shape ---------- */
   function toISO(v){
     v = String(v||"").trim();
-    var m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    var m = v.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
     if(m) return m[3]+"-"+("0"+m[1]).slice(-2)+"-"+("0"+m[2]).slice(-2);
     m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if(m) return v.slice(0,10);
@@ -352,11 +352,11 @@
     var c = {
       title:col("title"), status:col("status"), topic:col("topic"), action:col("action"),
       posted:col("posted"), by:col("posted by"), summary:col("summary"), details:col("details"),
-      steps:col("steps"), note:col("note"), thread:col("thread")
+      steps:col("steps"), note:(col("note")>=0?col("note"):col("notes")), thread:col("thread")
     };
     var out = [];
     rows.slice(1).forEach(function(r, i){
-      function g(k){ return c[k]>=0 ? String(r[c[k]]||"").trim() : ""; }
+      function g(k){ return c[k]>=0 ? String(r[c[k]]||"").trim().replace(/^"+|"+$/g,"").trim() : ""; }
       var title = g("title");
       if(!title) return;
       var status = normStatus(g("status"));
