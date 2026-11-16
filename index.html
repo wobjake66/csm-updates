@@ -209,7 +209,7 @@
     <span class="count" id="totalCount">0</span>
     <button class="alert-pill" id="actionBtn">⚠ <span id="actionCount">0</span> need action</button>
     <div class="search-wrap">
-      <input id="search" type="text" placeholder="Search by keyword — try “CIT”, “preview”, “Website Consultant”, “beta”">
+      <input id="search" type="text" placeholder="Search by keyword — try “CIT”, “preview”, “Website Consultant”">
     </div>
   </div>
   <p class="hint">Covers all posted updates. Live means in effect now. Pending means the detail isn't confirmed yet.</p>
@@ -244,11 +244,6 @@
     <span><b>Website Consultant assignments start Monday, 11/16.</b> When you schedule a design review, add the assigned WC to the appointment.</span>
     <button class="x" data-dismiss="bannerInfo">×</button>
   </div>
-  <div class="banner navy" id="bannerNavy">
-    <span>ⓘ</span>
-    <span><b>Mobile beta: end-of-beta details are not confirmed.</b> Say only: “We will notify you before it ends and share next steps.”</span>
-    <button class="x" data-dismiss="bannerNavy">×</button>
-  </div>
 
   <div class="tiles" id="tiles"></div>
 
@@ -277,12 +272,9 @@
   var UPDATES = [];
 
   var STATUS = [["all","All"],["live","Live"],["upcoming","Upcoming"],["pending","Pending"]];
-  var TOPICS = [["all","All"],["onboarding","Onboarding & CIT"],["website","Website & Design"],["sales","Mobile Beta"]];
-  var CATS = [
-    ["onboarding","Onboarding & CIT","Alignment calls, preview calls, design review"],
-    ["website","Website & Design","Website consultants and design review"],
-    ["sales","Mobile Beta","Beta reference, guardrails, and Hot PQL guidance"]
-  ];
+  /* Topics are built from whatever Topic values the sheet contains (see buildTopics). */
+  var TOPICS = [["all","All"]];
+  var CATS = [];
   var STATUS_LABEL = { live:"Live", upcoming:"Upcoming", pending:"Pending" };
 
   var state = { status:"all", topic:"all", sort:"newest", days:"0", q:"" };
@@ -333,12 +325,17 @@
     var t = String(v||"").trim().toLowerCase();
     return (t==="live"||t==="upcoming"||t==="pending") ? t : "live";
   }
-  function normTopic(v){
-    var t = String(v||"").trim().toLowerCase();
-    if(t.indexOf("onboard")!==-1) return "onboarding";
-    if(t.indexOf("website")!==-1) return "website";
-    if(t.indexOf("mobile")!==-1 || t.indexOf("beta")!==-1 || t.indexOf("sales")!==-1) return "sales";
-    return "sales";
+  /* Topic key is a URL-safe id made from the sheet's label; the label itself is shown as-is. */
+  function topicKey(v){
+    var k = String(v||"").trim().toLowerCase().replace(/&/g,"and").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+    return k || "general";
+  }
+  function topicLabel(v){
+    return String(v||"").trim() || "General";
+  }
+  /* Mobile Beta entries are retired and are not shown. */
+  function isRetiredTopic(v){
+    return /mobile\s*beta/i.test(String(v||""));
   }
   function splitSteps(v){
     return String(v||"").split(/\n+/).map(function(line){
@@ -359,13 +356,15 @@
       function g(k){ return c[k]>=0 ? String(r[c[k]]||"").trim().replace(/^"+|"+$/g,"").trim() : ""; }
       var title = g("title");
       if(!title) return;
+      if(isRetiredTopic(g("topic"))) return;
       var status = normStatus(g("status"));
       var note = g("note");
       out.push({
         id: "u-"+(i+1),
         title: title,
         status: status,
-        cat: normTopic(g("topic")),
+        cat: topicKey(g("topic")),
+        catName: topicLabel(g("topic")),
         action: /^yes$/i.test(g("action")),
         date: toISO(g("posted")) || "2026-01-01",
         author: g("by") || "Unknown",
@@ -378,6 +377,18 @@
       });
     });
     return out;
+  }
+
+  /* Build the topic sections and filter chips from the topics present in the sheet. */
+  function buildTopics(){
+    var seen = {}, list = [];
+    UPDATES.forEach(function(u){
+      if(!seen[u.cat]){ seen[u.cat] = true; list.push({ key:u.cat, label:u.catName }); }
+    });
+    list.sort(function(a,b){ return a.label.localeCompare(b.label); });
+    CATS = list.map(function(t){ return [t.key, t.label, ""]; });
+    TOPICS = [["all","All"]].concat(CATS.map(function(c){ return [c[0], c[1]]; }));
+    if(state.topic!=="all" && !seen[state.topic]) state.topic = "all";
   }
 
   /* ---------- Filtering / sorting ---------- */
@@ -443,7 +454,7 @@
     h += '</div>';
     if(u.summary) h += '<p class="sum">'+esc(u.summary)+'</p>';
     if(u.body && u.body.length){
-      h += '<div class="body">'; u.body.forEach(function(p){ h += "<p>"+esc(p)+"</p>"; }); h += '</div>';
+      h += '<div class="body">'; u.body.forEach(function(p){ h += "<p>"+esc(p).replace(/\r?\n/g,"<br>")+"</p>"; }); h += '</div>';
     }
     if(u.steps && u.steps.length){
       h += '<ol class="steps">'; u.steps.forEach(function(s){ h += "<li>"+esc(s)+"</li>"; }); h += '</ol>';
@@ -501,7 +512,7 @@
     CATS.forEach(function(c){
       var inCat = shown.filter(function(u){ return u.cat===c[0]; });
       if(!inCat.length) return;
-      html += '<section class="cat" id="cat-'+c[0]+'"><div class="cat-head"><h2>'+esc(c[1])+'</h2><span class="n">'+inCat.length+'</span><span class="d">'+esc(c[2])+'</span></div>';
+      html += '<section class="cat" id="cat-'+c[0]+'"><div class="cat-head"><h2>'+esc(c[1])+'</h2><span class="n">'+inCat.length+'</span>'+(c[2]?'<span class="d">'+esc(c[2])+'</span>':'')+'</div>';
       inCat.forEach(function(u){ html += entryHTML(u); });
       html += '</section>';
     });
@@ -531,6 +542,8 @@
         if(/<!doctype html|<html/i.test(text.slice(0,300))) throw new Error("the sheet returned a web page, not CSV. Check that it's published to the web.");
         var rows = parseCSV(text);
         UPDATES = rowsToUpdates(rows);
+        buildTopics();
+        renderFilters();
         if(!UPDATES.length){
           showMessage("No updates yet", "The sheet loaded but has no rows with a Title.");
         }
